@@ -96,10 +96,24 @@ function handlerValidateChirp(req: Request, res: Response): void {
         return;
       }
 
+      const profaneWords = ["kerfuffle", "sharbert", "fornax"];
+
+      const words = parsedBody.body.split(" ");
+
+      const cleanedWords = words.map((word: string) => {
+        if (profaneWords.includes(word.toLowerCase())) {
+          return "****";
+        }
+
+        return word;
+      });
+
+      const cleanedBody = cleanedWords.join(" ");
+
       res.header("Content-Type", "application/json");
       res.status(200).send(
         JSON.stringify({
-          valid: true,
+          cleanedBody: cleanedBody,
         })
       );
     } catch (error) {
