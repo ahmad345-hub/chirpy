@@ -1,7 +1,12 @@
 import express from "express";
 import { Request, Response, NextFunction } from "express";
 import { config } from "./config.js";
-
+import {
+  BadRequestError,
+  UnauthorizedError,
+  ForbiddenError,
+  NotFoundError,
+} from "./errors.js";
 const app = express();
 const PORT = 8080;
 
@@ -104,8 +109,10 @@ function handlerValidateChirp(
       const parsedBody = JSON.parse(body);
 
       if (parsedBody.body.length > 140) {
-        throw new Error("Chirp is too long");
-      }
+  throw new BadRequestError(
+    "Chirp is too long. Max length is 140"
+  );
+}
 
       const profaneWords = [
         "kerfuffle",
@@ -141,6 +148,34 @@ function errorHandler(
   next: NextFunction
 ): void {
   console.log(err);
+
+  if (err instanceof BadRequestError) {
+    res.status(400).json({
+      error: err.message,
+    });
+    return;
+  }
+
+  if (err instanceof UnauthorizedError) {
+    res.status(401).json({
+      error: err.message,
+    });
+    return;
+  }
+
+  if (err instanceof ForbiddenError) {
+    res.status(403).json({
+      error: err.message,
+    });
+    return;
+  }
+
+  if (err instanceof NotFoundError) {
+    res.status(404).json({
+      error: err.message,
+    });
+    return;
+  }
 
   res.status(500).json({
     error: "Something went wrong on our end",
