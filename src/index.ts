@@ -1,19 +1,29 @@
 import express from "express";
 import { Request, Response, NextFunction } from "express";
 import { config } from "./config.js";
+
 const app = express();
-app.use(middlewareLogResponses);
 const PORT = 8080;
 
+app.use(middlewareLogResponses);
+
+// API routes
 app.get("/api/healthz", handlerReadiness);
+app.post("/api/validate_chirp", handlerValidateChirp);
+
+// Admin routes
 app.get("/admin/metrics", handlerMetrics);
 app.post("/admin/reset", handlerReset);
-app.post("/api/validate_chirp", handlerValidateChirp);
+
+// Fileserver
 app.use(
   "/app",
   middlewareMetricsInc,
   express.static("./src/app")
 );
+
+// Error handler must be last
+app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(`Server is running at http://localhost:${PORT}`);
@@ -43,7 +53,6 @@ function middlewareLogResponses(
   next();
 }
 
-
 function middlewareMetricsInc(
   req: Request,
   res: Response,
@@ -53,8 +62,10 @@ function middlewareMetricsInc(
   next();
 }
 
-
-function handlerMetrics(req: Request, res: Response): void {
+function handlerMetrics(
+  req: Request,
+  res: Response
+): void {
   res.set("Content-Type", "text/html; charset=utf-8");
 
   res.send(`
@@ -67,15 +78,21 @@ function handlerMetrics(req: Request, res: Response): void {
   `);
 }
 
-
-function handlerReset(req: Request, res: Response): void {
+function handlerReset(
+  req: Request,
+  res: Response
+): void {
   config.fileserverHits = 0;
+
   res.set("Content-Type", "text/plain; charset=utf-8");
   res.send("Hits reset to 0");
 }
 
-
-function handlerValidateChirp(req: Request, res: Response): void {
+function handlerValidateChirp(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
   let body = "";
 
   req.on("data", (chunk) => {
@@ -87,16 +104,14 @@ function handlerValidateChirp(req: Request, res: Response): void {
       const parsedBody = JSON.parse(body);
 
       if (parsedBody.body.length > 140) {
-        res.header("Content-Type", "application/json");
-        res.status(400).send(
-          JSON.stringify({
-            error: "Chirp is too long",
-          })
-        );
-        return;
+        throw new Error("Chirp is too long");
       }
 
-      const profaneWords = ["kerfuffle", "sharbert", "fornax"];
+      const profaneWords = [
+        "kerfuffle",
+        "sharbert",
+        "fornax",
+      ];
 
       const words = parsedBody.body.split(" ");
 
@@ -110,19 +125,24 @@ function handlerValidateChirp(req: Request, res: Response): void {
 
       const cleanedBody = cleanedWords.join(" ");
 
-      res.header("Content-Type", "application/json");
-      res.status(200).send(
-        JSON.stringify({
-          cleanedBody: cleanedBody,
-        })
-      );
+      res.status(200).json({
+        cleanedBody: cleanedBody,
+      });
     } catch (error) {
-      res.header("Content-Type", "application/json");
-      res.status(400).send(
-        JSON.stringify({
-          error: "Something went wrong",
-        })
-      );
+      next(error);
     }
+  });
+}
+
+function errorHandler(
+  err: Error,
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  console.log(err);
+
+  res.status(500).json({
+    error: "Something went wrong on our end",
   });
 }
