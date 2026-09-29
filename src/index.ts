@@ -7,7 +7,7 @@ const PORT = 8080;
 
 app.get("/api/healthz", handlerReadiness);
 app.get("/admin/metrics", handlerMetrics);
-app.get("/admin/reset", handlerReset);
+app.post("/admin/reset", handlerReset);
 app.use(
   "/app",
   middlewareMetricsInc,
