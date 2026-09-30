@@ -1,6 +1,7 @@
 import express from "express";
 import { Request, Response, NextFunction } from "express";
 import postgres from "postgres";
+import { createChirp } from "./db/queries/chirps.js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import {
@@ -30,7 +31,7 @@ app.use(middlewareLogResponses);
 
 // API routes
 app.get("/api/healthz", handlerReadiness);
-app.post("/api/validate_chirp", handlerValidateChirp);
+app.post("/api/chirps", handlerCreateChirp);
 app.post("/api/users", handlerCreateUser);
 // Admin routes
 app.get("/admin/metrics", handlerMetrics);
@@ -125,7 +126,7 @@ async function handlerReset(
   }
 }
 
-function handlerValidateChirp(
+function handlerCreateChirp(
   req: Request,
   res: Response,
   next: NextFunction
@@ -136,7 +137,7 @@ function handlerValidateChirp(
     body += chunk;
   });
 
-  req.on("end", () => {
+  req.on("end", async () => {
     try {
       const parsedBody = JSON.parse(body);
 
@@ -164,14 +165,19 @@ function handlerValidateChirp(
 
       const cleanedBody = cleanedWords.join(" ");
 
-      res.status(200).json({
-        cleanedBody: cleanedBody,
+      const chirp = await createChirp({
+        body: cleanedBody,
+        userId: parsedBody.userId,
       });
+
+      res.status(201).json(chirp);
     } catch (error) {
       next(error);
     }
   });
 }
+
+ 
 
 function errorHandler(
   err: Error,
