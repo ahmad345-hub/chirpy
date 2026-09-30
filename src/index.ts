@@ -1,7 +1,10 @@
 import express from "express";
 import { Request, Response, NextFunction } from "express";
 import postgres from "postgres";
-import { createChirp } from "./db/queries/chirps.js";
+import {
+  createChirp,
+  getAllChirps,
+} from "./db/queries/chirps.js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import {
@@ -32,6 +35,7 @@ app.use(middlewareLogResponses);
 // API routes
 app.get("/api/healthz", handlerReadiness);
 app.post("/api/chirps", handlerCreateChirp);
+app.get("/api/chirps", handlerGetAllChirps);
 app.post("/api/users", handlerCreateUser);
 // Admin routes
 app.get("/admin/metrics", handlerMetrics);
@@ -237,4 +241,19 @@ function handlerCreateUser(
       next(error);
     }
   });
+}
+
+
+async function handlerGetAllChirps(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const chirps = await getAllChirps();
+
+    res.status(200).json(chirps);
+  } catch (error) {
+    next(error);
+  }
 }
