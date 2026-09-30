@@ -11,7 +11,13 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import {
   createUser,
   deleteAllUsers,
+  getUserByEmail,
 } from "./db/queries/users.js";
+import {
+  hashPassword,
+  checkPasswordHash,
+} from "./auth.js";
+
 import { config } from "./config.js";
 import {
   BadRequestError,
@@ -36,6 +42,7 @@ app.use(middlewareLogResponses);
 // API routes
 app.get("/api/healthz", handlerReadiness);
 app.get("/api/chirps/:chirpId", handlerGetChirpById);
+app.post("/api/login", handlerLogin);
 app.post("/api/chirps", handlerCreateChirp);
 app.get("/api/chirps", handlerGetAllChirps);
 app.post("/api/users", handlerCreateUser);
@@ -234,16 +241,31 @@ function handlerCreateUser(
     try {
       const parsedBody = JSON.parse(body);
 
+      const hashedPassword = await hashPassword(
+        parsedBody.password
+      );
+
       const user = await createUser({
         email: parsedBody.email,
+        hashedPassword: hashedPassword,
       });
 
-      res.status(201).json(user);
+      if (!user) {
+        throw new Error("Could not create user");
+      }
+
+      const {
+        hashedPassword: _,
+        ...userResponse
+      } = user;
+
+      res.status(201).json(userResponse);
     } catch (error) {
       next(error);
     }
   });
 }
+ 
 
 
 async function handlerGetAllChirps(
@@ -279,4 +301,61 @@ async function handlerGetChirpById(
   } catch (error) {
     next(error);
   }
+}
+
+
+
+function handlerLogin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  let body = "";
+
+  req.on("data", (chunk) => {
+    body += chunk;
+  });
+
+  req.on("end", async () => {
+    try {
+      const parsedBody = JSON.parse(body);
+
+      const user = await getUserByEmail(parsedBody.email);
+
+      if (!user) {
+        throw new UnauthorizedError(
+          "incorrect email or password"
+        );
+      }
+
+      const passwordMatches = await checkPasswordHash(
+        parsedBody.password,
+        user.hashedPassword
+      );
+
+      if (!passwordMatches) {
+        throw new UnauthorizedError(
+          "incorrect email or password"
+        );
+      }
+
+      const {
+        hashedPassword: _,
+        ...userResponse
+      } = user;
+
+      res.status(200).json(userResponse);
+    } catch (error) {
+      if (error instanceof UnauthorizedError) {
+        next(error);
+        return;
+      }
+
+      next(
+        new UnauthorizedError(
+          "incorrect email or password"
+        )
+      );
+    }
+  });
 }
