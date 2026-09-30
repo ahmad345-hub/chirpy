@@ -1,5 +1,12 @@
 import express from "express";
 import { Request, Response, NextFunction } from "express";
+import postgres from "postgres";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
+import { drizzle } from "drizzle-orm/postgres-js";
+import {
+  createUser,
+  deleteAllUsers,
+} from "./db/queries/users.js";
 import { config } from "./config.js";
 import {
   BadRequestError,
@@ -7,37 +14,49 @@ import {
   ForbiddenError,
   NotFoundError,
 } from "./errors.js";
-const app = express();
-const PORT = 8080;
 
+// Run database migrations automatically
+const migrationClient = postgres(config.db.url, { max: 1 });
+
+await migrate(
+  drizzle(migrationClient),
+  config.db.migrationConfig
+);
+
+const app = express();
+
+// Middleware
 app.use(middlewareLogResponses);
 
 // API routes
 app.get("/api/healthz", handlerReadiness);
 app.post("/api/validate_chirp", handlerValidateChirp);
-
+app.post("/api/users", handlerCreateUser);
 // Admin routes
 app.get("/admin/metrics", handlerMetrics);
 app.post("/admin/reset", handlerReset);
 
-// Fileserver
+// Static files
 app.use(
   "/app",
   middlewareMetricsInc,
   express.static("./src/app")
 );
 
-// Error handler must be last
+// Error handler
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`Server is running at http://localhost:${PORT}`);
+// Start server
+app.listen(config.api.port, () => {
+  console.log(
+    `Server is running at http://localhost:${config.api.port}`
+  );
 });
 
-async function handlerReadiness(
+function handlerReadiness(
   req: Request,
   res: Response
-): Promise<void> {
+): void {
   res.set("Content-Type", "text/plain; charset=utf-8");
   res.send("OK");
 }
@@ -63,7 +82,7 @@ function middlewareMetricsInc(
   res: Response,
   next: NextFunction
 ): void {
-  config.fileserverHits++;
+  config.api.fileserverHits++;
   next();
 }
 
@@ -77,20 +96,33 @@ function handlerMetrics(
 <html>
   <body>
     <h1>Welcome, Chirpy Admin</h1>
-    <p>Chirpy has been visited ${config.fileserverHits} times!</p>
+    <p>Chirpy has been visited ${config.api.fileserverHits} times!</p>
   </body>
 </html>
   `);
 }
 
-function handlerReset(
+async function handlerReset(
   req: Request,
-  res: Response
-): void {
-  config.fileserverHits = 0;
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (config.api.platform !== "dev") {
+      throw new ForbiddenError(
+        "Reset is only allowed in dev environment"
+      );
+    }
 
-  res.set("Content-Type", "text/plain; charset=utf-8");
-  res.send("Hits reset to 0");
+    config.api.fileserverHits = 0;
+
+    await deleteAllUsers();
+
+    res.set("Content-Type", "text/plain; charset=utf-8");
+    res.send("Hits reset to 0");
+  } catch (error) {
+    next(error);
+  }
 }
 
 function handlerValidateChirp(
@@ -109,10 +141,10 @@ function handlerValidateChirp(
       const parsedBody = JSON.parse(body);
 
       if (parsedBody.body.length > 140) {
-  throw new BadRequestError(
-    "Chirp is too long. Max length is 140"
-  );
-}
+        throw new BadRequestError(
+          "Chirp is too long. Max length is 140"
+        );
+      }
 
       const profaneWords = [
         "kerfuffle",
@@ -150,34 +182,53 @@ function errorHandler(
   console.log(err);
 
   if (err instanceof BadRequestError) {
-    res.status(400).json({
-      error: err.message,
-    });
+    res.status(400).json({ error: err.message });
     return;
   }
 
   if (err instanceof UnauthorizedError) {
-    res.status(401).json({
-      error: err.message,
-    });
+    res.status(401).json({ error: err.message });
     return;
   }
 
   if (err instanceof ForbiddenError) {
-    res.status(403).json({
-      error: err.message,
-    });
+    res.status(403).json({ error: err.message });
     return;
   }
 
   if (err instanceof NotFoundError) {
-    res.status(404).json({
-      error: err.message,
-    });
+    res.status(404).json({ error: err.message });
     return;
   }
 
   res.status(500).json({
     error: "Something went wrong on our end",
+  });
+}
+
+
+function handlerCreateUser(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  let body = "";
+
+  req.on("data", (chunk) => {
+    body += chunk;
+  });
+
+  req.on("end", async () => {
+    try {
+      const parsedBody = JSON.parse(body);
+
+      const user = await createUser({
+        email: parsedBody.email,
+      });
+
+      res.status(201).json(user);
+    } catch (error) {
+      next(error);
+    }
   });
 }
