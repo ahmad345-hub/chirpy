@@ -4,6 +4,7 @@ import postgres from "postgres";
 import {
   createChirp,
   getAllChirps,
+  getChirpById,
 } from "./db/queries/chirps.js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -34,6 +35,7 @@ app.use(middlewareLogResponses);
 
 // API routes
 app.get("/api/healthz", handlerReadiness);
+app.get("/api/chirps/:chirpId", handlerGetChirpById);
 app.post("/api/chirps", handlerCreateChirp);
 app.get("/api/chirps", handlerGetAllChirps);
 app.post("/api/users", handlerCreateUser);
@@ -253,6 +255,27 @@ async function handlerGetAllChirps(
     const chirps = await getAllChirps();
 
     res.status(200).json(chirps);
+  } catch (error) {
+    next(error);
+  }
+}
+
+
+async function handlerGetChirpById(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const chirpId = req.params.chirpId;
+
+    const chirp = await getChirpById(chirpId);
+
+    if (!chirp) {
+      throw new NotFoundError("Chirp not found");
+    }
+
+    res.status(200).json(chirp);
   } catch (error) {
     next(error);
   }
