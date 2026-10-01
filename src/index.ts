@@ -32,6 +32,7 @@ import {
   deleteAllUsers,
   getUserByEmail,
   updateUser,
+  upgradeUserToChirpyRed,
 } from "./db/queries/users.js";
 
 import {
@@ -79,6 +80,11 @@ app.use(middlewareLogResponses);
 app.get(
   "/api/healthz",
   handlerReadiness
+);
+
+app.post(
+  "/api/polka/webhooks",
+  handlerPolkaWebhook
 );
 
 app.post(
@@ -793,4 +799,42 @@ async function handlerDeleteChirp(
   } catch (error) {
     next(error);
   }
+}
+
+
+function handlerPolkaWebhook(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  let body = "";
+
+  req.on("data", (chunk) => {
+    body += chunk;
+  });
+
+  req.on("end", async () => {
+    try {
+      const parsedBody = JSON.parse(body);
+
+      if (parsedBody.event !== "user.upgraded") {
+        res.status(204).send();
+        return;
+      }
+
+      const user = await upgradeUserToChirpyRed(
+        parsedBody.data.userId
+      );
+
+      if (!user) {
+        throw new NotFoundError(
+          "User not found"
+        );
+      }
+
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  });
 }
