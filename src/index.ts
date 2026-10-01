@@ -31,12 +31,14 @@ import {
   createUser,
   deleteAllUsers,
   getUserByEmail,
+  updateUser,
 } from "./db/queries/users.js";
 
 import {
   createChirp,
   getAllChirps,
   getChirpById,
+  deleteChirp,
 } from "./db/queries/chirps.js";
 
 import {
@@ -84,6 +86,11 @@ app.post(
   handlerCreateUser
 );
 
+app.delete(
+  "/api/chirps/:chirpId",
+  handlerDeleteChirp
+);
+
 app.post(
   "/api/login",
   handlerLogin
@@ -93,6 +100,8 @@ app.post(
   "/api/refresh",
   handlerRefresh
 );
+
+app.put("/api/users", handlerUpdateUser);
 
 app.post(
   "/api/revoke",
@@ -677,4 +686,111 @@ function errorHandler(
     error:
       "Something went wrong on our end",
   });
+}
+
+
+function handlerUpdateUser(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  let body = "";
+
+  req.on("data", (chunk) => {
+    body += chunk;
+  });
+
+  req.on("end", async () => {
+    try {
+      let userId: string;
+
+      try {
+        const token = getBearerToken(req);
+
+        userId = validateJWT(
+          token,
+          config.api.jwtSecret
+        );
+      } catch {
+        throw new UnauthorizedError(
+          "Invalid token"
+        );
+      }
+
+      const parsedBody = JSON.parse(body);
+
+      const hashedPassword = await hashPassword(
+        parsedBody.password
+      );
+
+      const user = await updateUser(
+        userId,
+        parsedBody.email,
+        hashedPassword
+      );
+
+      if (!user) {
+        throw new UnauthorizedError(
+          "Invalid token"
+        );
+      }
+
+      const {
+        hashedPassword: _,
+        ...userResponse
+      } = user;
+
+      res.status(200).json(userResponse);
+    } catch (error) {
+      next(error);
+    }
+  });
+}
+
+
+async function handlerDeleteChirp(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    let userId: string;
+
+    try {
+      const token = getBearerToken(req);
+
+      userId = validateJWT(
+        token,
+        config.api.jwtSecret
+      );
+    } catch {
+      throw new UnauthorizedError(
+        "Invalid token"
+      );
+    }
+
+    const chirpId = req.params.chirpId;
+
+    const chirp = await getChirpById(
+      chirpId
+    );
+
+    if (!chirp) {
+      throw new NotFoundError(
+        "Chirp not found"
+      );
+    }
+
+    if (chirp.userId !== userId) {
+      throw new ForbiddenError(
+        "You cannot delete this chirp"
+      );
+    }
+
+    await deleteChirp(chirpId);
+
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
 }

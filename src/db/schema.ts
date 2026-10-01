@@ -19,6 +19,7 @@ export const users = pgTable("users", {
   hashedPassword: varchar("hashed_password", { length: 256 })
     .notNull()
     .default("unset"),
+  
 });
 
 export type NewUser = typeof users.$inferInsert;
