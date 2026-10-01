@@ -597,9 +597,28 @@ async function handlerGetAllChirps(
         ? req.query.authorId
         : undefined;
 
+    const sort =
+      typeof req.query.sort === "string"
+        ? req.query.sort
+        : "asc";
+
     const chirps = await getAllChirps(
       authorId
     );
+
+    if (sort === "desc") {
+      chirps.sort(
+        (a, b) =>
+          b.createdAt.getTime() -
+          a.createdAt.getTime()
+      );
+    } else {
+      chirps.sort(
+        (a, b) =>
+          a.createdAt.getTime() -
+          b.createdAt.getTime()
+      );
+    }
 
     res.status(200).json(chirps);
   } catch (error) {
