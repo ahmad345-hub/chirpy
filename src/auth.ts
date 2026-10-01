@@ -79,3 +79,21 @@ export function makeRefreshToken(): string {
 
 
 
+export function getAPIKey(req: Request): string {
+  const authHeader = req.get("Authorization");
+
+  if (!authHeader) {
+    throw new Error("Authorization header is missing");
+  }
+
+  const parts = authHeader.split(" ");
+
+  if (
+    parts.length !== 2 ||
+    parts[0] !== "ApiKey"
+  ) {
+    throw new Error("Invalid Authorization header");
+  }
+
+  return parts[1];
+}

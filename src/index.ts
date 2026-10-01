@@ -25,6 +25,7 @@ import {
   validateJWT,
   getBearerToken,
   makeRefreshToken,
+  getAPIKey,
 } from "./auth.js";
 
 import {
@@ -591,8 +592,14 @@ async function handlerGetAllChirps(
   next: NextFunction
 ): Promise<void> {
   try {
-    const chirps =
-      await getAllChirps();
+    const authorId =
+      typeof req.query.authorId === "string"
+        ? req.query.authorId
+        : undefined;
+
+    const chirps = await getAllChirps(
+      authorId
+    );
 
     res.status(200).json(chirps);
   } catch (error) {
@@ -815,6 +822,22 @@ function handlerPolkaWebhook(
 
   req.on("end", async () => {
     try {
+      let apiKey: string;
+
+      try {
+        apiKey = getAPIKey(req);
+      } catch {
+        throw new UnauthorizedError(
+          "Invalid API key"
+        );
+      }
+
+      if (apiKey !== config.api.polkaKey) {
+        throw new UnauthorizedError(
+          "Invalid API key"
+        );
+      }
+
       const parsedBody = JSON.parse(body);
 
       if (parsedBody.event !== "user.upgraded") {
